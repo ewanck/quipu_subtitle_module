@@ -1,0 +1,301 @@
+<?php
+
+//Defines block for Subtitle module;
+
+function subtitle_block_info() {
+  $blocks['subtitle'] = array(
+    'info' => t('Subtitle'),
+    'cache' => DRUPAL_CACHE_PER_ROLE,
+  );
+  return $blocks;
+}
+
+//Defines block content
+
+function subtitle_block_view() {
+  $block['subject'] = t('Subtitle Sync');
+  if (user_access('access content')) {
+    $urls = '571';
+    $items = array();
+    $items[] = array('data' => 'test');
+//    $block['content'] = theme('item_list', array('items' => $urls));
+    $block['content'] = '<form  method="post" action="http://www.quipu-project.com/amarasync"><input type="submit"></form>';
+  };
+  return $block;
+};
+
+function subtitle_menu() {
+  $item['amarasync'] = array(
+          'type' => MENU_CALLBACK,
+          'page callback' => 'subtitle_amara_sync',
+	  'access arguments' => array('access content'),
+	  'delivery callback' => 'drupal_json_output',
+  );
+
+  return $item;
+}
+
+function subtitle_amara_sync() {
+//  $result = update_existing_videos();
+//  dpm($result); 
+//  pull_subs('en');
+//  pull_subs('en');
+  $result = pull_subs('en');
+  return $result;
+};
+
+function migrate_urls() {
+  $list = "";
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node')
+    ->propertyCondition('type', 'audio_story')
+    ->propertyOrderBy('created', 'DESC');
+  $results = $query->execute();
+  if (isset($results['node'])) {
+    $nodes = node_load_multiple(array_keys($results['node']));
+
+    foreach ($nodes as $node) {
+      $audio_link = field_get_items('node', $node, 'field_audio_link');
+      $fragment = substr($audio_link[0]['value'], 0, 25);
+      if($fragment == "http://www.quipu-project/") {
+//        $fid = field_get_items('node', $node, 'field_recording_fid');
+//	$file = file_load($fid[0]['value']);
+//        $path = $file->uri;
+//	if ($prefix == "http://www.quipu-project/sites") {
+          $end_path = substr($audio_link[0]['value'], 25); 
+	  $new_url = "http://www.quipu-project.com/".$end_path;
+//	if ($path != NULL) {
+          $node->field_audio_link[LANGUAGE_NONE][0]['value'] = $new_url;
+          node_save($node);
+      	  $list = $list.$new_url."  //  ";
+//	}
+      }
+    }
+  }
+  return $list;
+}
+
+function update_existing_videos() {
+  $i = 0;
+  $headers = array('Accept' => ' application/json', 'X-api-username' => 'ewanck', 'X-apikey' => '786e5cc325bb3d7b3779c8c572c6a4a1126a87f1', 'Content-Type' => 'application/json');
+  $options = array("headers" => $headers);
+  $url = 'https://www.amara.org/api2/partners/videos/?team=quipuproject';
+  $response = drupal_http_request($url, $options);
+  $data = json_decode($response->data, TRUE);
+
+  foreach ($data['objects'] as $obj) {
+    $query = new EntityFieldQuery();
+    $query->entityCondition('entity_type', 'node')
+      ->fieldCondition('field_audio_link', 'value', $obj['all_urls'][0], '=')
+      ->propertyCondition('type', 'audio_story')
+       ->propertyOrderBy('created', 'DESC');
+    $results = $query->execute();
+    if (isset($results['node'])) {
+      $nodes = node_load_multiple(array_keys($results['node']));
+
+      foreach ($nodes as $node) {
+        $audio_link = field_get_items('node', $node, 'field_audio_link');
+        $length = field_get_items('node', $node, 'field_length');
+	$language = field_get_items('node', $node, 'field_audio_language');
+//        node_load($node->nid);
+	$node->field_subtitles_sent['und'][0]['value'] = '1';
+	$node->field_subtitles_id['und'][0]['value'] = $obj['id'];
+	node_save($node);
+
+	$post_data = array(
+	   'video_url' => $obj['all_urls'][0],
+	   'title' => $node->title,
+	   'duration' => $length[0]['value'],
+	   'primary_audio_language_code' => $language[0]['value'],
+  	);
+	$vid_url = 'https://www.amara.org/api2/partners/videos/'.$obj['id'].'/';
+        $ch = curl_init($vid_url);
+  	curl_setopt_array($ch, array(
+  			 CURLOPT_CUSTOMREQUEST => "PUT",
+			 CURLOPT_RETURNTRANSFER => TRUE,
+			 CURLOPT_HTTPHEADER => array(
+			     		    'Accept: application/json', 
+					    'X-api-username: ewanck', 
+					    'X-apikey: 786e5cc325bb3d7b3779c8c572c6a4a1126a87f1',
+					    'Content-Type: application/json',
+			 ),
+			 CURLOPT_POSTFIELDS => json_encode($post_data)
+  	));
+  	$response = curl_exec($ch);
+  	if($response === FALSE){
+    	  die(curl_error($ch));	
+  	};
+	$i = $i + 1;
+      };
+    };
+  };
+  return $i;
+};
+
+function push_subs() {
+  $i = 0;
+  $results = load_audio_to_send();
+  foreach ($results as $result) {
+    $i = $i + 1;
+    $index = send_new_audios($result);
+    $node = node_load($result['nid']);
+    $node->field_subtitles_id['und'][0]['value'] = $index;
+    $node->field_subtitles_sent['und'][0]['value'] = '1';
+    node_save($node);
+  };
+  return $i;
+};
+
+function pull_subs($lang) {
+  $results = load_pending($lang);
+  $updated = 0;
+  foreach ($results as $result) {
+    $subtitles = retrieve_subtitles($result['subtitle_id'], $lang);
+    if($subtitles!="") {
+      $i = 0;
+      $node = node_load($result['nid']);
+      if($lang == 'es') {    
+      	foreach ($subtitles as $subtitle) {
+          $node->field_in['und'][$i]['value'] = $subtitle['start']/1000;
+          $node->field_out['und'][$i]['value'] = $subtitle['end']/1000;
+          $node->field_subtitle['und'][$i]['value'] = $subtitle['text'];
+          $i = $i + 1;
+        };
+        $node->field_subtitles_es_complete['und'][0]['value'] = '1';
+      } else {
+        foreach ($subtitles as $subtitle) {
+          $node->field_in_en['und'][$i]['value'] = $subtitle['start']/1000;
+          $node->field_out_en['und'][$i]['value'] = $subtitle['end']/1000;
+          $node->field_subtitle_en['und'][$i]['value'] = $subtitle['text'];
+          $i = $i + 1;
+        };
+        $node->field_subtitles_en_complete['und'][0]['value'] = '1';      
+      };   
+      node_save($node);
+      $updated = $updated + 1;
+    };
+  };
+  return $updated;
+}
+
+function retrieve_subtitles($pending, $lang) {
+    $headers = array('Accept' => ' application/json', 'X-api-username' => 'ewanck', 'X-apikey' => '786e5cc325bb3d7b3779c8c572c6a4a1126a87f1', 'Content-Type' => 'application/json');
+    $options = array("headers" => $headers);
+    $url = 'https://www.amara.org/api2/partners/videos/'.$pending.'/languages/'.$lang.'/subtitles/';
+    $response = drupal_http_request($url, $options);
+    $data = json_decode($response->data, TRUE);
+    return $data['subtitles'];
+};
+
+function send_new_audios($data) {
+//    $headers = array('Accept' => 'application/json', 'X-api-username'=> 'ewanck', 'X-apikey' =>'786e5cc325bb3d7b3779c8c572c6a4a1126a87f1', 'Content-Type' => 'application/json');
+//    $options = array("headers" => $headers, "method" => "POST", "data" => "{'video_url':'".$link."', 'primary_audio_language_code':'es', 'duration':12, 'title':'test'}");
+//    $result = drupal_http_request('https://www.amara.org/api2/partners/videos/?format=json', $options);
+
+  $link = $data['audio_link'];
+  $length = $data['length'];
+  $title = $data['title'];
+  $language = $data['language'];
+
+  $post_data = array(
+  	     'video_url' => $link,
+	     'title' => $title,
+	     'duration' => $length,
+	     'primary_audio_language_code' => $language,
+	     'team' => 'quipuproject',
+  );
+  $ch = curl_init('http://www.amara.org/api2/partners/videos/');
+  curl_setopt_array($ch, array(
+  			 CURLOPT_POST => TRUE,
+			 CURLOPT_RETURNTRANSFER => TRUE,
+			 CURLOPT_HTTPHEADER => array(
+			     		    'Accept: application/json', 
+					    'X-api-username: ewanck', 
+					    'X-apikey: 786e5cc325bb3d7b3779c8c572c6a4a1126a87f1',
+					    'Content-Type: application/json',
+			 ),
+			 CURLOPT_POSTFIELDS => json_encode($post_data)
+  ));
+  $response = curl_exec($ch);
+  if($response === FALSE){
+    die(curl_error($ch));	
+  };
+
+  $result = json_decode($response, TRUE);
+
+  return $result['id'];
+}
+
+function load_audio_to_send() {
+  $callback = array();
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node')
+
+    ->fieldCondition('field_moderated', 'value', 1, '=')
+    ->fieldCondition('field_subtitles_sent', 'value', 0, '=')
+    ->propertyCondition('status', 1)
+    ->propertyCondition('type', 'audio_story')
+    ->propertyOrderBy('created', 'DESC');
+  $results = $query->execute();
+  if (isset($results['node'])) {
+    $nodes = node_load_multiple(array_keys($results['node']));
+
+    foreach ($nodes as $node) {
+      $nid = $node->nid;
+      $title = $node->title;
+      $length = field_get_items('node', $node, 'field_length');
+      $audio_link = field_get_items('node', $node, 'field_audio_link');
+      $language = field_get_items('node', $node, 'field_audio_language');
+      $to_send = array(
+      	       'nid' => $nid,
+	       'title' => $title,
+	       'length' => $length[0]['value'],
+	       'audio_link' => $audio_link[0]['value'],
+	       'language' => $language[0]['value'],
+	       );
+      $callback[] = $to_send;
+    };
+  };
+
+  return $callback;
+}
+
+function load_pending($lang) {
+
+  $callback = array();
+  $query = new EntityFieldQuery();
+
+  if($lang == 'es') {
+    $query->entityCondition('entity_type', 'node')
+      ->fieldCondition('field_moderated', 'value', 1, '=')
+      ->fieldCondition('field_subtitles_es_complete', 'value', 0, '=')
+      ->fieldCondition('field_subtitles_sent', 'value', 1, '=')
+      ->propertyCondition('type', 'audio_story')
+      ->propertyOrderBy('created', 'DESC');
+  } else {
+    $query->entityCondition('entity_type', 'node')
+      ->fieldCondition('field_moderated', 'value', 1, '=')
+      ->fieldCondition('field_subtitles_en_complete', 'value', 0, '=')
+      ->fieldCondition('field_subtitles_sent', 'value', 1, '=')
+      ->propertyCondition('type', 'audio_story')
+      ->propertyOrderBy('created', 'DESC');    
+  };
+
+  $results = $query->execute();
+
+  if (isset($results['node'])) {
+    $nodes = node_load_multiple(array_keys($results['node']));
+
+    foreach ($nodes as $node) {
+      $nid = $node->nid;
+      $subtitle_id = field_get_items('node', $node, 'field_subtitles_id');
+      $to_send = array(
+      	       'nid' => $nid,
+	       'subtitle_id' => $subtitle_id[0]['value'],
+	       );
+      $callback[] = $to_send;
+    };
+  };
+
+  return $callback;
+}
