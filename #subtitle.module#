@@ -88,7 +88,7 @@ function update_existing_videos() {
     $query->entityCondition('entity_type', 'node')
       ->fieldCondition('field_audio_link', 'value', $obj['all_urls'][0], '=')
       ->propertyCondition('type', 'audio_story')
-       ->propertyOrderBy('created', 'DESC');
+      ->propertyOrderBy('created', 'DESC');
     $results = $query->execute();
     if (isset($results['node'])) {
       $nodes = node_load_multiple(array_keys($results['node']));
