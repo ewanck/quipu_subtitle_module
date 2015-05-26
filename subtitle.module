@@ -40,7 +40,7 @@ function subtitle_amara_sync() {
 //  dpm($result); 
 //  pull_subs('en');
 //  pull_subs('en');
-  $result = pull_subs('en');
+  $result = pull_subs('es');
   return $result;
 };
 
@@ -400,9 +400,9 @@ function load_pending($lang) {
       	       'nid' => $nid,
 	       'subtitle_id' => $subtitle_id[0]['value'],
 	       );
-      if ($nid == '356') {
-        $callback[] = $to_send;
-      };
+//      if ($nid == '356') {
+      $callback[] = $to_send;
+//      };
     };
   };
 
