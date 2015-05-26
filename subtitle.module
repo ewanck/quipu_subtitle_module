@@ -146,11 +146,117 @@ function push_subs() {
   return $i;
 };
 
+function format_time($milliseconds) {
+  $msec_hh = 1000 * 60 * 60;
+  $msec_mm = 1000 * 60;
+  $msec_ss = 1000;
+
+  return sprintf("%02s:%02s:%02s,%03s", (int)($milliseconds / $msec_hh), (int)(($milliseconds % $msec_hh) / $msec_mm), (int)((($milliseconds % $msec_hh) % $msec_mm) / $msec_ss), (int)((($milliseconds % $msec_hh) % $msec_mm) % $msec_ss) );
+};
+
 function pull_subs($lang) {
   $results = load_pending($lang);
   $updated = 0;
   foreach ($results as $result) {
-    $subtitles = retrieve_subtitles($result['subtitle_id'], $lang);
+    $response = retrieve_subtitles($result['subtitle_id'], $lang);
+    $data = json_decode($response->data, TRUE);
+    $subtitles = $data['subtitles'];
+    if($subtitles!="") {
+      $i = 1;
+      $srt = "";
+      foreach ($subtitles as $subtitle) {
+        $in = format_time($subtitle['start']);
+	$out = format_time($subtitle['end']);
+	$sub = $subtitle['text'];
+        $srt .= sprintf("%s\n%s --> %s\n%s\n\n",(string)$i, $in, $out, $sub);
+	$i = $i + 1;
+      };
+      $node = node_load($result['nid']);
+      $name = $node->field_name['und'][0]['value'] . '.srt';
+      $name_json = $node->field_name['und'][0]['value'] . '.json';
+      if($lang == 'es') {
+        $file = file_save_data($srt, 'public://srt/es/' . $name);
+	$node->field_srt_es[LANGUAGE_NONE][0] = array(
+	  'fid' => $file->fid,
+	  'filename' => $file->filename,
+	  'filemime' => $file->filemime,
+	  'uid' => 1,
+	  'uri' => $file->uri,
+	  'status' => 1,
+	  'display' => 1
+	);
+	$json_file = file_save_data($response->data, 'public://subtitles/es/' . $name_json);
+      	$node->field_subtitles_json[LANGUAGE_NONE][0] = array(
+	  'fid' => $json_file->fid,
+	  'filename' => $json_file->filename,
+	  'filemime' => $json_file->filemime,
+	  'uid' => 1,
+	  'uri' => $json_file->uri,
+	  'status' => 1,
+	  'display' => 1
+        );
+	$node->field_subtitles_es_complete['und'][0]['value'] = '1';
+      } else {
+        $file = file_save_data($srt, 'public://srt/en/' . $name);
+	$node->field_srt_en[LANGUAGE_NONE][0]= array(
+	  'fid' => $file->fid,
+	  'filename' => $file->filename,
+	  'filemime' => $file->filemime,
+	  'uid' => 1,
+	  'uri' => $file->uri,
+	  'status' => 1,
+	  'display' => 1
+	);
+	$json_file = file_save_data($response->data, 'public://subtitles/en/' . $name_json);
+      	$node->field_subtitles_json_en[LANGUAGE_NONE][0] = array(
+	  'fid' => $json_file->fid,
+	  'filename' => $json_file->filename,
+	  'filemime' => $json_file->filemime,
+	  'uid' => 1,
+	  'uri' => $json_file->uri,
+	  'status' => 1,
+	  'display' => 1
+        );
+	$node->field_subtitles_en_complete['und'][0]['value'] = '1';
+      };
+      node_save($node);
+      $updated = $updated + 1;
+    };
+  };    
+  
+/*      $node = node_load($result['nid']);
+      if($lang == 'es') {    
+      	foreach ($subtitles as $subtitle) {
+          $node->field_in['und'][$i]['value'] = $subtitle['start']/1000;
+          $node->field_out['und'][$i]['value'] = $subtitle['end']/1000;
+          $node->field_subtitle['und'][$i]['value'] = $subtitle['text'];
+          $i = $i + 1;
+        };
+        $node->field_subtitles_es_complete['und'][0]['value'] = '1';
+      } else {
+        foreach ($subtitles as $subtitle) {
+          $node->field_in_en['und'][$i]['value'] = $subtitle['start']/1000;
+          $node->field_out_en['und'][$i]['value'] = $subtitle['end']/1000;
+          $node->field_subtitle_en['und'][$i]['value'] = $subtitle['text'];
+          $i = $i + 1;
+        };
+        $node->field_subtitles_en_complete['und'][0]['value'] = '1';      
+      };   
+      node_save($node);
+      $updated = $updated + 1;
+    };
+  };*/
+
+  return $updated;
+}
+
+/* function pull_subs($lang) {
+  $results = load_pending($lang);
+  $updated = 0;
+  foreach ($results as $result) {
+    $response = retrieve_subtitles($result['subtitle_id'], $lang);
+    $data = json_decode($response->data, TRUE);
+    $subtitles = $data['subtitles'];
     if($subtitles!="") {
       $i = 0;
       $node = node_load($result['nid']);
@@ -176,15 +282,16 @@ function pull_subs($lang) {
     };
   };
   return $updated;
-}
+} */
 
 function retrieve_subtitles($pending, $lang) {
     $headers = array('Accept' => ' application/json', 'X-api-username' => 'ewanck', 'X-apikey' => '786e5cc325bb3d7b3779c8c572c6a4a1126a87f1', 'Content-Type' => 'application/json');
     $options = array("headers" => $headers);
     $url = 'https://www.amara.org/api2/partners/videos/'.$pending.'/languages/'.$lang.'/subtitles/';
     $response = drupal_http_request($url, $options);
-    $data = json_decode($response->data, TRUE);
-    return $data['subtitles'];
+//    $data = json_decode($response->data, TRUE);
+//    return $data['subtitles'];
+    return $response;
 };
 
 function send_new_audios($data) {
@@ -293,7 +400,9 @@ function load_pending($lang) {
       	       'nid' => $nid,
 	       'subtitle_id' => $subtitle_id[0]['value'],
 	       );
+//      if ($nid == '356') {
       $callback[] = $to_send;
+//      };
     };
   };
 
