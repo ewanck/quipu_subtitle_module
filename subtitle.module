@@ -40,7 +40,7 @@ function subtitle_amara_sync() {
 //  dpm($result); 
 //  pull_subs('en');
 //  pull_subs('en');
-  $result = pull_subs('es');
+  $result = pull_subs('en');
   return $result;
 };
 
@@ -186,7 +186,7 @@ function pull_subs($lang) {
 	  'display' => 1
 	);
 	$json_file = file_save_data($response->data, 'public://subtitles/es/' . $name_json);
-      	$node->field_subtitles_json[LANGUAGE_NONE][0] = array(
+      	$node->field_subtitles_json_es[LANGUAGE_NONE][0] = array(
 	  'fid' => $json_file->fid,
 	  'filename' => $json_file->filename,
 	  'filemime' => $json_file->filemime,
