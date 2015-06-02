@@ -40,7 +40,7 @@ function subtitle_amara_sync() {
 //  dpm($result); 
 //  pull_subs('en');
 //  pull_subs('en');
-  $result = pull_subs('es');
+  $result = pull_subs('en');
   return $result;
 };
 
@@ -172,9 +172,10 @@ function pull_subs($lang) {
 	$i = $i + 1;
       };
       $node = node_load($result['nid']);
-      $splitstr = explode('.', $node->field_audio_file['und'][0]['filename']);
-      $name = $splitstr[0] . '.srt';
-      $name_json = $splitstr[0] . '.json';
+      $splitstr = explode('/', $node->field_audio_link['und'][0]['value']);
+      $splitstr2 = explode('.', $splitstr[6]);
+      $name = $splitstr2[0] . '.srt';
+      $name_json = $splitstr2[0] . '.json';
       if($lang == 'es') {
         $file = file_save_data($srt, 'public://srt/es/' . $name);
 	$node->field_srt_es[LANGUAGE_NONE][0] = array(
