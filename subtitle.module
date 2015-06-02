@@ -40,7 +40,7 @@ function subtitle_amara_sync() {
 //  dpm($result); 
 //  pull_subs('en');
 //  pull_subs('en');
-  $result = pull_subs('en');
+  $result = pull_subs('es');
   return $result;
 };
 
@@ -376,14 +376,14 @@ function load_pending($lang) {
   if($lang == 'es') {
     $query->entityCondition('entity_type', 'node')
       ->fieldCondition('field_moderated', 'value', 1, '=')
-      ->fieldCondition('field_subtitles_es_complete', 'value', 0, '=')
+//      ->fieldCondition('field_subtitles_es_complete', 'value', 0, '=')
       ->fieldCondition('field_subtitles_sent', 'value', 1, '=')
       ->propertyCondition('type', 'audio_story')
       ->propertyOrderBy('created', 'DESC');
   } else {
     $query->entityCondition('entity_type', 'node')
       ->fieldCondition('field_moderated', 'value', 1, '=')
-      ->fieldCondition('field_subtitles_en_complete', 'value', 0, '=')
+//      ->fieldCondition('field_subtitles_en_complete', 'value', 0, '=')
       ->fieldCondition('field_subtitles_sent', 'value', 1, '=')
       ->propertyCondition('type', 'audio_story')
       ->propertyOrderBy('created', 'DESC');    
