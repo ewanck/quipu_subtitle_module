@@ -15,19 +15,18 @@ function subtitle_block_info() {
 function subtitle_block_view() {
   $block['subject'] = t('Subtitle Sync');
   if (user_access('access content')) {
-    $urls = '571';
-    $items = array();
-    $items[] = array('data' => 'test');
+    $items = count_pending();
 //    $block['content'] = theme('item_list', array('items' => $urls));
-    $block['content'] = '<form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarapush"><input value="Push" type="submit"></form><br /><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarapull"><input value="Pull" type="submit"></form><br /><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarasync"><input value="Sync All" type="submit"></form>';
+    $block['content'] = vsprintf('<table id="subtitle-info"><tr><td>To be sent to Amara:</td><td>Pending ES</td><td>Pending EN</td></tr><tr><td>%s</td><td>%s</td><td>%s</td></tr><tr><td><a>View List -></a></td><td><a>View List -></a></td><td><a>View List -></a></td></tr><td><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarapush"><input value="Push" type="submit"></form><br /></td><td><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarapull"><input value="Pull EN" type="submit"></form></td><td><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarapull"><input value="Pull ES" type="submit"></form></td></tr></table><br /><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarasync/pull/es/all"><input value="Sync All" type="submit"></form>', $items);
   };
   return $block;
 };
 
 function subtitle_menu() {
-  $item['amarasync'] = array(
+  $item['amarasync/%/%/%'] = array(
           'type' => MENU_CALLBACK,
           'page callback' => 'subtitle_amara_sync',
+	  'page arguments' => array('subtitle_amara_sync', 3),
 	  'access arguments' => array('access content'),
 	  'delivery callback' => 'drupal_json_output',
   );
@@ -35,13 +34,108 @@ function subtitle_menu() {
   return $item;
 }
 
-function subtitle_amara_sync() {
+function subtitle_amara_sync($mode, $lang, $testimony) {
 //  $result = update_existing_videos();
 //  dpm($result); 
 //  pull_subs('en');
 //  pull_subs('en');
-  $result = pull_subs('en');
-  return $result;
+//  $result = pull_subs('en');
+  switch ($mode) {
+    case "push":
+      if ($testimony == 'all') { 
+        $result = push();
+	return $result;
+      } else {
+        $result = update_single_url($testimony);
+	if ($result == 'error') {
+	  return 'This testimony is waiting to be edited and cannot be sent at this time.';
+	} else {
+	  return 'Success! This testimony link has been updated in Amara.';
+	};
+      };
+      break;
+    case "pull":
+      $result = pull_subs($testimony, $lang);
+      return $result;
+      break;
+    case "remove":
+      $result = remove_from_amara($testimony);
+      return $result;
+      break;
+  };
+};
+
+function count_pending() {
+  $unsent = load_audio_to_send();
+  $pending_es = load_pending('es');
+  $pending_en = load_pending('en');
+  $stats = array();
+  $stats['unsent'] = count($unsent);
+  $stats['pending_es'] = count($pending_es);
+  $stats['pending_en'] = count($pending_en);
+  return $stats;
+}
+
+function remove_from_amara($nid) {
+//  $post_data = array(
+//    'url' => $link,
+//    'primary' => TRUE,
+//  );
+  $node = node_load($nid);
+  $sid = $node->field_subtitles_id['und'][0]['value'];
+  $vid_url = 'https://www.amara.org/api2/partners/videos/'.$sid;
+  $ch = curl_init($vid_url);
+  curl_setopt_array($ch, array(
+  	CURLOPT_CUSTOMREQUEST => "DELETE",
+	CURLOPT_RETURNTRANSFER => TRUE,
+	CURLOPT_HTTPHEADER => array(
+	  'Accept: application/json', 
+	  'X-api-username: ewanck', 
+	  'X-apikey: 786e5cc325bb3d7b3779c8c572c6a4a1126a87f1',
+	  'Content-Type: application/json',
+	),
+//	CURLOPT_POSTFIELDS => json_encode($post_data)
+  ));
+  $response = curl_exec($ch);
+  if($response === FALSE){
+    die(curl_error($ch));	
+  };
+  return $response;
+}
+
+function update_single_url($testimony) {
+  $node = node_load($testimony);
+  if($node->field_to_edit['und'][0]['value'] == 1) {
+    if(array_key_exists('und', $node->field_basic_edit)) {
+      $link = "http://phoneline.quipu-project.com/sites/default/files/" . $node->field_basic_edit['und'][0]['filename'];
+    } else {
+      return 'error';
+    };
+  } else {
+    $link = "http://phoneline.quipu-project.com/sites/default/files/" . $node->field_audio_file['und'][0]['filename'];
+  };
+  $post_data = array(
+    'url' => $link,
+    'primary' => TRUE,
+  );
+  $vid_url = 'https://www.amara.org/api2/partners/videos/'.$node->field_subtitles_id['und'][0]['value'].'/urls/';
+  $ch = curl_init($vid_url);
+  curl_setopt_array($ch, array(
+  	CURLOPT_CUSTOMREQUEST => "POST",
+	CURLOPT_RETURNTRANSFER => TRUE,
+	CURLOPT_HTTPHEADER => array(
+	  'Accept: application/json', 
+	  'X-api-username: ewanck', 
+	  'X-apikey: 786e5cc325bb3d7b3779c8c572c6a4a1126a87f1',
+	  'Content-Type: application/json',
+	),
+	CURLOPT_POSTFIELDS => json_encode($post_data)
+  ));
+  $response = curl_exec($ch);
+  if($response === FALSE){
+    die(curl_error($ch));	
+  };
+  return $response;
 };
 
 function migrate_urls() {
@@ -154,78 +248,46 @@ function format_time($milliseconds) {
   return sprintf("%02s:%02s:%02s,%03s", (int)($milliseconds / $msec_hh), (int)(($milliseconds % $msec_hh) / $msec_mm), (int)((($milliseconds % $msec_hh) % $msec_mm) / $msec_ss), (int)((($milliseconds % $msec_hh) % $msec_mm) % $msec_ss) );
 };
 
-function pull_subs($lang) {
-  $results = load_pending($lang);
+function json_to_csv($data) {
+  $i = 1;
+  $srt = "";
+  foreach ($data as $subtitle) {
+    $in = format_time($subtitle['start']);
+    $out = format_time($subtitle['end']);
+    $sub = $subtitle['text'];
+    $srt .= sprintf("%s\n%s --> %s\n%s\n\n",(string)$i, $in, $out, $sub);
+    $i = $i + 1;
+  };
+  return $srt;
+};
+
+function pull_subs($testimony, $lang) {
   $updated = 0;
-  foreach ($results as $result) {
-    $response = retrieve_subtitles($result['subtitle_id'], $lang);
+  if ($testimony == 'all') {
+    $results = load_pending($lang);
+    foreach ($results as $result) {
+      $response = retrieve_subtitles($result['subtitle_id'], $lang);
+      $data = json_decode($response->data, TRUE);
+      $subtitles = $data['subtitles'];
+      if($subtitles!="") {
+        $srt = json_to_csv($subtitles);
+//      $node = node_load($result['nid']);
+        save_subs($result['nid'], $srt, $lang);
+      	$updated = $updated + 1;
+      };
+    };
+  } else {
+    $node = node_load($testimony);
+    $sid = $node->field_subtitles_id['und'][0]['value'];
+    $response = retrieve_subtitles($sid, $lang);
     $data = json_decode($response->data, TRUE);
     $subtitles = $data['subtitles'];
-    if($subtitles!="") {
-      $i = 1;
-      $srt = "";
-      foreach ($subtitles as $subtitle) {
-        $in = format_time($subtitle['start']);
-	$out = format_time($subtitle['end']);
-	$sub = $subtitle['text'];
-        $srt .= sprintf("%s\n%s --> %s\n%s\n\n",(string)$i, $in, $out, $sub);
-	$i = $i + 1;
-      };
-      $node = node_load($result['nid']);
-      $splitstr = explode('/', $node->field_audio_link['und'][0]['value']);
-      $splitstr2 = explode('.', $splitstr[6]);
-      $name = $splitstr2[0] . '.srt';
-      $name_json = $splitstr2[0] . '.json';
-      if($lang == 'es') {
-        $file = file_save_data($srt, 'public://srt/es/' . $name);
-	$node->field_srt_es[LANGUAGE_NONE][0] = array(
-	  'fid' => $file->fid,
-	  'filename' => $file->filename,
-	  'filemime' => $file->filemime,
-	  'uid' => 1,
-	  'uri' => $file->uri,
-	  'status' => 1,
-	  'display' => 1
-	);
-	$json_file = file_save_data($response->data, 'public://subtitles/es/' . $name_json);
-      	$node->field_subtitles_json[LANGUAGE_NONE][0] = array(
-	  'fid' => $json_file->fid,
-	  'filename' => $json_file->filename,
-	  'filemime' => $json_file->filemime,
-	  'uid' => 1,
-	  'uri' => $json_file->uri,
-	  'status' => 1,
-	  'display' => 1
-        );
-	$node->field_subtitles_es_complete['und'][0]['value'] = '1';
-      } else {
-        $file = file_save_data($srt, 'public://srt/en/' . $name);
-	$node->field_srt_en[LANGUAGE_NONE][0]= array(
-	  'fid' => $file->fid,
-	  'filename' => $file->filename,
-	  'filemime' => $file->filemime,
-	  'uid' => 1,
-	  'uri' => $file->uri,
-	  'status' => 1,
-	  'display' => 1
-	);
-	$json_file = file_save_data($response->data, 'public://subtitles/en/' . $name_json);
-      	$node->field_subtitles_json_en[LANGUAGE_NONE][0] = array(
-	  'fid' => $json_file->fid,
-	  'filename' => $json_file->filename,
-	  'filemime' => $json_file->filemime,
-	  'uid' => 1,
-	  'uri' => $json_file->uri,
-	  'status' => 1,
-	  'display' => 1
-        );
-	$node->field_subtitles_en_complete['und'][0]['value'] = '1';
-      };
-      node_save($node);
-      $updated = $updated + 1;
+    if ($subtitles !='') {
+      $srt = json_to_csv($subtitles);
+      save_subs($testimony, $srt, $lang);
+      $updated = 1;
     };
-  };    
-  
+  };  
 /*      $node = node_load($result['nid']);
       if($lang == 'es') {    
       	foreach ($subtitles as $subtitle) {
@@ -252,39 +314,38 @@ function pull_subs($lang) {
   return $updated;
 }
 
-/* function pull_subs($lang) {
-  $results = load_pending($lang);
-  $updated = 0;
-  foreach ($results as $result) {
-    $response = retrieve_subtitles($result['subtitle_id'], $lang);
-    $data = json_decode($response->data, TRUE);
-    $subtitles = $data['subtitles'];
-    if($subtitles!="") {
-      $i = 0;
-      $node = node_load($result['nid']);
-      if($lang == 'es') {    
-      	foreach ($subtitles as $subtitle) {
-          $node->field_in['und'][$i]['value'] = $subtitle['start']/1000;
-          $node->field_out['und'][$i]['value'] = $subtitle['end']/1000;
-          $node->field_subtitle['und'][$i]['value'] = $subtitle['text'];
-          $i = $i + 1;
-        };
-        $node->field_subtitles_es_complete['und'][0]['value'] = '1';
-      } else {
-        foreach ($subtitles as $subtitle) {
-          $node->field_in_en['und'][$i]['value'] = $subtitle['start']/1000;
-          $node->field_out_en['und'][$i]['value'] = $subtitle['end']/1000;
-          $node->field_subtitle_en['und'][$i]['value'] = $subtitle['text'];
-          $i = $i + 1;
-        };
-        $node->field_subtitles_en_complete['und'][0]['value'] = '1';      
-      };   
-      node_save($node);
-      $updated = $updated + 1;
-    };
+function save_subs($nid, $srt, $lang) {
+  $node = node_load($nid);
+  $splitstr = explode('/', $node->field_audio_link['und'][0]['value']);
+  $splitstr2 = explode('.', $splitstr[6]);
+  $name = $splitstr2[0] . '.srt';
+  if($lang == 'es') {
+    $file = file_save_data($srt, 'public://srt/es/' . $name);
+    $node->field_srt_es[LANGUAGE_NONE][0] = array(
+      'fid' => $file->fid,
+      'filename' => $file->filename,
+      'filemime' => $file->filemime,
+      'uid' => 1,
+      'uri' => $file->uri,
+      'status' => 1,
+      'display' => 1
+    );
+    $node->field_subtitles_es_complete['und'][0]['value'] = '1';
+  } else {
+    $file = file_save_data($srt, 'public://srt/en/' . $name);
+    $node->field_srt_en[LANGUAGE_NONE][0]= array(
+      'fid' => $file->fid,
+      'filename' => $file->filename,
+      'filemime' => $file->filemime,
+      'uid' => 1,
+      'uri' => $file->uri,
+      'status' => 1,
+      'display' => 1
+    );
+    $node->field_subtitles_en_complete['und'][0]['value'] = '1';
   };
-  return $updated;
-} */
+  node_save($node);
+};
 
 function retrieve_subtitles($pending, $lang) {
     $headers = array('Accept' => ' application/json', 'X-api-username' => 'ewanck', 'X-apikey' => '786e5cc325bb3d7b3779c8c572c6a4a1126a87f1', 'Content-Type' => 'application/json');
@@ -340,7 +401,7 @@ function load_audio_to_send() {
   $query = new EntityFieldQuery();
   $query->entityCondition('entity_type', 'node')
 
-    ->fieldCondition('field_moderated', 'value', 1, '=')
+//    ->fieldCondition('field_moderated', 'value', 1, '=')
     ->fieldCondition('field_subtitles_sent', 'value', 0, '=')
     ->propertyCondition('status', 1)
     ->propertyCondition('type', 'audio_story')
@@ -348,18 +409,25 @@ function load_audio_to_send() {
   $results = $query->execute();
   if (isset($results['node'])) {
     $nodes = node_load_multiple(array_keys($results['node']));
-
     foreach ($nodes as $node) {
+      if($node->field_to_edit['und'][0]['value'] == 1) {
+        if(array_key_exists('und', $node->field_basic_edit)) {
+      	  $link = "http://phoneline.quipu-project.com/sites/default/files/" . $node->field_basic_edit['und'][0]['filename'];
+    	} else {
+      	  $link = 'error';
+    	};
+      } else {
+        $link = "http://phoneline.quipu-project.com/sites/default/files/" . $node->field_audio_file['und'][0]['filename'];
+      };
       $nid = $node->nid;
       $title = $node->title;
       $length = field_get_items('node', $node, 'field_length');
-      $audio_link = field_get_items('node', $node, 'field_audio_link');
       $language = field_get_items('node', $node, 'field_audio_language');
       $to_send = array(
       	       'nid' => $nid,
 	       'title' => $title,
 	       'length' => $length[0]['value'],
-	       'audio_link' => $audio_link[0]['value'],
+	       'audio_link' => $link,
 	       'language' => $language[0]['value'],
 	       );
       $callback[] = $to_send;
@@ -376,16 +444,18 @@ function load_pending($lang) {
 
   if($lang == 'es') {
     $query->entityCondition('entity_type', 'node')
-      ->fieldCondition('field_moderated', 'value', 1, '=')
+//      ->fieldCondition('field_moderated', 'value', 1, '=')
       ->fieldCondition('field_subtitles_es_complete', 'value', 0, '=')
       ->fieldCondition('field_subtitles_sent', 'value', 1, '=')
       ->propertyCondition('type', 'audio_story')
+      ->propertyCondition('status', 1)
       ->propertyOrderBy('created', 'DESC');
   } else {
     $query->entityCondition('entity_type', 'node')
-      ->fieldCondition('field_moderated', 'value', 1, '=')
+//      ->fieldCondition('field_moderated', 'value', 1, '=')
       ->fieldCondition('field_subtitles_en_complete', 'value', 0, '=')
       ->fieldCondition('field_subtitles_sent', 'value', 1, '=')
+      ->propertyCondition('status', 1)
       ->propertyCondition('type', 'audio_story')
       ->propertyOrderBy('created', 'DESC');    
   };
@@ -402,9 +472,9 @@ function load_pending($lang) {
       	       'nid' => $nid,
 	       'subtitle_id' => $subtitle_id[0]['value'],
 	       );
-//      if ($nid == '356') {
-      $callback[] = $to_send;
-//      };
+      if ($nid == '356') {
+        $callback[] = $to_send;
+      };
     };
   };
 
