@@ -177,7 +177,7 @@ function pull_subs($lang) {
       $name = $splitstr2[0] . '.srt';
       $name_json = $splitstr2[0] . '.json';
       if($lang == 'es') {
-        $file = file_save_data($srt, 'public://srt/es/' . $name);
+        $file = file_save_data($srt, 'public://srt/es/' . $name, FILE_EXISTS_REPLACE);
 	$node->field_srt_es[LANGUAGE_NONE][0] = array(
 	  'fid' => $file->fid,
 	  'filename' => $file->filename,
@@ -187,7 +187,7 @@ function pull_subs($lang) {
 	  'status' => 1,
 	  'display' => 1
 	);
-	$json_file = file_save_data($response->data, 'public://subtitles/es/' . $name_json);
+	$json_file = file_save_data($response->data, 'public://subtitles/es/' . $name_json, FILE_EXISTS_REPLACE);
       	$node->field_subtitles_json_es[LANGUAGE_NONE][0] = array(
 	  'fid' => $json_file->fid,
 	  'filename' => $json_file->filename,
@@ -199,7 +199,7 @@ function pull_subs($lang) {
         );
 	$node->field_subtitles_es_complete['und'][0]['value'] = '1';
       } else {
-        $file = file_save_data($srt, 'public://srt/en/' . $name);
+        $file = file_save_data($srt, 'public://srt/en/' . $name, FILE_EXISTS_REPLACE);
 	$node->field_srt_en[LANGUAGE_NONE][0]= array(
 	  'fid' => $file->fid,
 	  'filename' => $file->filename,
@@ -377,14 +377,14 @@ function load_pending($lang) {
   if($lang == 'es') {
     $query->entityCondition('entity_type', 'node')
       ->fieldCondition('field_moderated', 'value', 1, '=')
-//      ->fieldCondition('field_subtitles_es_complete', 'value', 0, '=')
+      ->fieldCondition('field_subtitles_es_complete', 'value', 0, '=')
       ->fieldCondition('field_subtitles_sent', 'value', 1, '=')
       ->propertyCondition('type', 'audio_story')
       ->propertyOrderBy('created', 'DESC');
   } else {
     $query->entityCondition('entity_type', 'node')
       ->fieldCondition('field_moderated', 'value', 1, '=')
-//      ->fieldCondition('field_subtitles_en_complete', 'value', 0, '=')
+      ->fieldCondition('field_subtitles_en_complete', 'value', 0, '=')
       ->fieldCondition('field_subtitles_sent', 'value', 1, '=')
       ->propertyCondition('type', 'audio_story')
       ->propertyOrderBy('created', 'DESC');    
