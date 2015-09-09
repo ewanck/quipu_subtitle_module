@@ -26,7 +26,7 @@ function subtitle_menu() {
   $item['amarasync/%/%/%'] = array(
           'type' => MENU_CALLBACK,
           'page callback' => 'subtitle_amara_sync',
-	  'page arguments' => array(1,2,3),
+	  'page arguments' => array(1, 2, 3),
 	  'access arguments' => array('access content'),
 	  'delivery callback' => 'drupal_json_output',
   );
@@ -47,11 +47,12 @@ function subtitle_amara_sync($mode, $lang, $testimony) {
 	return $result;
       } else {
         $result = update_single_url($testimony);
-	if ($result == 'error') {
-	  return 'This testimony is waiting to be edited and cannot be sent at this time.';
-	} else {
-	  return 'Success! This testimony link has been updated in Amara.';
-	};
+//	if ($result == 'error') {
+//	  return 'This testimony is waiting to be edited and cannot be sent at this time.';
+//	} else {
+//	  return 'Success! This testimony link has been updated in Amara.';
+	return $result;
+//	};
       };
       break;
     case "pull":
@@ -109,7 +110,7 @@ function update_single_url($testimony) {
     if(array_key_exists('und', $node->field_basic_edit)) {
       $link = "http://phoneline.quipu-project.com/sites/default/files/" . $node->field_basic_edit['und'][0]['filename'];
     } else {
-      return 'error';
+      return 'ERROR: This video is still waiting to be edited';
     };
   } else {
     $link = "http://phoneline.quipu-project.com/sites/default/files/" . $node->field_audio_file['und'][0]['filename'];
@@ -118,7 +119,11 @@ function update_single_url($testimony) {
     'url' => $link,
     'primary' => TRUE,
   );
-  $vid_url = 'https://www.amara.org/api2/partners/videos/'.$node->field_subtitles_id['und'][0]['value'].'/urls/';
+  if (array_key_exists('und', $node->field_subtitles_id)) {
+    $vid_url = 'https://www.amara.org/api2/partners/videos/'.$node->field_subtitles_id['und'][0]['value'].'/urls/';
+  } else {
+    return 'ERROR: This video has not yet been sent to Amara.';
+  };
   $ch = curl_init($vid_url);
   curl_setopt_array($ch, array(
   	CURLOPT_CUSTOMREQUEST => "POST",
@@ -135,7 +140,7 @@ function update_single_url($testimony) {
   if($response === FALSE){
     die(curl_error($ch));	
   };
-  return $response;
+  return "Success! This testimony's URL has now been updated in Amara.";
 };
 
 function migrate_urls() {
