@@ -17,7 +17,7 @@ function subtitle_block_view() {
   if (user_access('access content')) {
     $items = count_pending();
 //    $block['content'] = theme('item_list', array('items' => $urls));
-    $block['content'] = vsprintf('<table id="subtitle-info"><tr><td>To be sent to Amara:</td><td>Pending ES</td><td>Pending EN</td></tr><tr><td>%s</td><td>%s</td><td>%s</td></tr><tr><td><a>View List -></a></td><td><a>View List -></a></td><td><a>View List -></a></td></tr><td><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarapush"><input value="Push" type="submit"></form><br /></td><td><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarapull"><input value="Pull EN" type="submit"></form></td><td><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarapull"><input value="Pull ES" type="submit"></form></td></tr></table><br /><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarasync/pull/es/all"><input value="Sync All" type="submit"></form>', $items);
+    $block['content'] = vsprintf('<table id="subtitle-info"><tr><td>To be sent to Amara:</td><td>Pending ES</td><td>Pending EN</td></tr><tr><td>%s</td><td>%s</td><td>%s</td></tr><tr><td><a>View List -></a></td><td><a>View List -></a></td><td><a>View List -></a></td></tr><td><form  method="post" action="http://phoneline.quipu-project.com/amarasync/push/null/all"><input value="Push" type="submit"></form><br /></td><td><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarapull"><input value="Pull EN" type="submit"></form></td><td><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarapull"><input value="Pull ES" type="submit"></form></td></tr></table><br /><form  method="post" action="http://sandbox.chakafilms.com/sandbox/projectquipu/amarasync/pull/es/all"><input value="Sync All" type="submit"></form>', $items);
   };
   return $block;
 };
@@ -26,7 +26,7 @@ function subtitle_menu() {
   $item['amarasync/%/%/%'] = array(
           'type' => MENU_CALLBACK,
           'page callback' => 'subtitle_amara_sync',
-	  'page arguments' => array('subtitle_amara_sync', 3),
+	  'page arguments' => array(1,2,3),
 	  'access arguments' => array('access content'),
 	  'delivery callback' => 'drupal_json_output',
   );
@@ -43,7 +43,7 @@ function subtitle_amara_sync($mode, $lang, $testimony) {
   switch ($mode) {
     case "push":
       if ($testimony == 'all') { 
-        $result = push();
+        $result = push_subs();
 	return $result;
       } else {
         $result = update_single_url($testimony);
@@ -366,14 +366,27 @@ function send_new_audios($data) {
   $length = $data['length'];
   $title = $data['title'];
   $language = $data['language'];
-
-  $post_data = array(
-  	     'video_url' => $link,
-	     'title' => $title,
-	     'duration' => $length,
-	     'primary_audio_language_code' => $language,
-	     'team' => 'quipuproject',
-  );
+  switch ($language) {
+    case "es":
+      $post_data = array(
+  	         'video_url' => $link,
+	     	 'title' => $title,
+	     	 'duration' => $length,
+	     	 'primary_audio_language_code' => $language,
+	     	 'team' => 'quipuproject',
+      );
+      break;
+    case "que":
+      $post_data = array(
+                 'video_url' => $link,
+             	 'title' => $title,
+             	 'duration' => $length,
+             	 'primary_audio_language_code' => $language,
+             	 'team' => 'quipuproject',
+	     	 'project' => 'quechua',
+      );
+      break;
+  };
   $ch = curl_init('http://www.amara.org/api2/partners/videos/');
   curl_setopt_array($ch, array(
   			 CURLOPT_POST => TRUE,
@@ -472,9 +485,9 @@ function load_pending($lang) {
       	       'nid' => $nid,
 	       'subtitle_id' => $subtitle_id[0]['value'],
 	       );
-      if ($nid == '356') {
-        $callback[] = $to_send;
-      };
+//      if ($nid == '356') {
+      $callback[] = $to_send;
+//      };
     };
   };
 
